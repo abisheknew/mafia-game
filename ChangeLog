@@ -6,3 +6,7 @@ Changes to be implemented in the next version
 2. When players join the lobby and are waiting for their role assignment, they can see all the other players who've joined the lobby
 3. The roles and the corresponding number on the host screen don't reset when the host resets the game. It stays persistent as long as the game room is active
 4. When the host resets the game, the players who've joined the lobby stay joined and are not kicked out. Add another "Kick all" button in the host screen to remove all the players
+
+Recent fixes
+------------
+- 2026-06-10: Fixed session/cookie collision where multiple visitors could be assigned the same `device_id` (causing duplicated players). The server now issues a secure random `device_id` for visitors without a cookie and appends new players while holding the room lock. Added `simulate_joins.py` to reproduce and verify the fix.

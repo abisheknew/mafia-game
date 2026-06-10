@@ -1,7 +1,7 @@
 
 import os
 import json
-from flask import Flask, request, jsonify, redirect, url_for, render_template, make_response, session, Response
+from flask import Flask, request, jsonify, redirect, url_for, render_template, make_response, session, Response, g
 from threading import Lock
 from flask import send_from_directory
 
@@ -65,28 +65,22 @@ def get_role_description(role_name):
 
 # Add this helper function after the imports
 def get_device_id():
-    # First try to get existing device ID from cookie (most reliable)
+    # Cache device id for the duration of this request to ensure consistency
+    if getattr(g, 'device_id', None):
+        return g.device_id
+
+    # Prefer an existing cookie if provided
     device_id = request.cookies.get('device_id')
     if device_id:
+        g.device_id = device_id
         return device_id
-    
-    # Generate deterministic device ID based on browser fingerprint (without random components)
-    ip = request.remote_addr
-    if request.headers.get('X-Forwarded-For'):
-        ip = request.headers.get('X-Forwarded-For').split(',')[0].strip()
-    
-    # Collect browser characteristics (deterministic)
-    user_agent = request.headers.get('User-Agent', '')
-    accept_language = request.headers.get('Accept-Language', '')
-    accept_encoding = request.headers.get('Accept-Encoding', '')
-    accept = request.headers.get('Accept', '')
-    
-    # Create deterministic device fingerprint (no random components)
-    import hashlib
-    device_string = f"{ip}|{user_agent}|{accept_language}|{accept_encoding}|{accept}"
-    device_id = hashlib.md5(device_string.encode()).hexdigest()[:16]
-    
-    return device_id
+
+    # No cookie -> generate a secure random device id for this visitor and cache it
+    # This avoids deterministic collisions for different users behind the same NAT/UA
+    import secrets
+    new_id = secrets.token_urlsafe(16)
+    g.device_id = new_id
+    return new_id
 
 # Helper function to ensure device cookie is always set
 def make_response_with_device_cookie(template_or_redirect, **kwargs):
@@ -363,9 +357,9 @@ def join_room(room_name):
             return redirect(url_for('join_page', room_name=room_name, error='Name already taken'))
 
         # Add new player with device ID (only if device hasn't joined before)
-    room['players'].append({'name': name, 'device_id': player_ip})
-    # Pre-assign a chat color for this player to avoid flash on first message
-    _assign_chat_color_for_player(room, name)
+        room['players'].append({'name': name, 'device_id': player_ip})
+        # Pre-assign a chat color for this player to avoid flash on first message
+        _assign_chat_color_for_player(room, name)
 
     resp = make_response_with_device_cookie('thanks.html', name=name, room_name=room_name, player_ip=player_ip)
     resp.set_cookie('player_name', name, max_age=COOKIE_TTL)      # Changed from ROOM_TTL
